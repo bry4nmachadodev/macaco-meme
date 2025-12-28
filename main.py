@@ -3,10 +3,15 @@ import numpy as np
 
 # ===== CAMERA =====
 cap = cv2.VideoCapture(0)
-
-# ===== IMAGENS =====
 macaco_parado = cv2.imread("macaco-parado.jpg")
 macaco_dedo = cv2.imread("macaco-dedo-levantado.jpg")
+
+# ===== JANELAS =====
+cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)
+cv2.namedWindow("Macaco", cv2.WINDOW_NORMAL)
+
+cv2.resizeWindow("Camera", 800, 600)
+cv2.resizeWindow("Macaco", 300, 300)
 
 cv2.imshow("Macaco", macaco_parado)
 
@@ -39,9 +44,6 @@ while True:
     upper_skin = np.array([35, 255, 255])
 
     mask = cv2.inRange(hsv, lower_skin, upper_skin)
-
-    # Debug da máscara
-    cv2.imshow("Mask (Skin)", mask)
 
     # Quantidade de pixels brancos
     pixels_brancos = cv2.countNonZero(mask)
