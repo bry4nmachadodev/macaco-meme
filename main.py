@@ -11,7 +11,7 @@ cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Macaco", cv2.WINDOW_NORMAL)
 
 cv2.resizeWindow("Camera", 800, 600)
-cv2.resizeWindow("Macaco", 300, 300)
+cv2.resizeWindow("Macaco", 800, 600)
 
 cv2.imshow("Macaco", macaco_parado)
 
