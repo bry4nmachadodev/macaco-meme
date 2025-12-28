@@ -13,6 +13,17 @@ cv2.namedWindow("Macaco", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("Camera", 800, 600)
 cv2.resizeWindow("Macaco", 800, 600)
 
+
+cv2.moveWindow("Camera", 900, 100)
+cv2.moveWindow("Macaco", 900, 100)
+
+# === POSIÇÃO LADO A LADO ===
+# Coloca a janela "Macaco" à esquerda
+cv2.moveWindow("Macaco", 100, 100)        # x=100, y=100
+
+# Coloca a janela "Camera" imediatamente à direita da primeira
+cv2.moveWindow("Camera", 100 + 800 + 10, 100)  # x = posição anterior + largura + pequeno espaçamento
+
 cv2.imshow("Macaco", macaco_parado)
 
 frames_sem_mao = 0
