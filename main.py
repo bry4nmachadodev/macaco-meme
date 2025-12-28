@@ -1,86 +1,116 @@
 import cv2
+import mediapipe as mp
 import numpy as np
 
-# ===== CAMERA =====
-cap = cv2.VideoCapture(0)
+BaseOptions = mp.tasks.BaseOptions
+HandLandmarker = mp.tasks.vision.HandLandmarker
+HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
+VisionRunningMode = mp.tasks.vision.RunningMode
+
 macaco_parado = cv2.imread("macaco-parado.jpg")
 macaco_dedo = cv2.imread("macaco-dedo-levantado.jpg")
 
-# ===== JANELAS =====
+options = HandLandmarkerOptions(
+    base_options=BaseOptions(model_asset_path='hand_landmarker.task'),
+    running_mode=VisionRunningMode.VIDEO,
+    num_hands=2,
+    min_hand_detection_confidence=0.5,   # Baixei um pouco pra detectar mais fácil
+    min_hand_presence_confidence=0.5,    # Mais sensível
+    min_tracking_confidence=0.5
+)
+
 cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Macaco", cv2.WINDOW_NORMAL)
-
 cv2.resizeWindow("Camera", 800, 600)
 cv2.resizeWindow("Macaco", 800, 600)
-
-
-cv2.moveWindow("Camera", 900, 100)
-cv2.moveWindow("Macaco", 900, 100)
-
-# === POSIÇÃO LADO A LADO ===
-# Coloca a janela "Macaco" à esquerda
-cv2.moveWindow("Macaco", 100, 100)        # x=100, y=100
-
-# Coloca a janela "Camera" imediatamente à direita da primeira
-cv2.moveWindow("Camera", 100 + 800 + 10, 100)  # x = posição anterior + largura + pequeno espaçamento
-
+cv2.moveWindow("Macaco", 100, 100)
+cv2.moveWindow("Camera", 910, 100)
 cv2.imshow("Macaco", macaco_parado)
 
-frames_sem_mao = 0
+cap = cv2.VideoCapture(0)
+frames_sem_indicador = 0
 THRESHOLD = 5
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
+# Conexões da mão
+HAND_CONNECTIONS = [
+    (0,1),(1,2),(2,3),(3,4),
+    (0,5),(5,6),(6,7),(7,8),
+    (0,9),(9,10),(10,11),(11,12),
+    (0,13),(13,14),(14,15),(15,16),
+    (0,17),(17,18),(18,19),(19,20),
+    (5,9),(9,13),(13,17)
+]
 
-    # Espelhar
-    frame = cv2.flip(frame, 1)
+with HandLandmarker.create_from_options(options) as landmarker:
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-    altura, largura, _ = frame.shape
+        frame = cv2.flip(frame, 1)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+        
+        timestamp_ms = int(cv2.getTickCount() * 1000 / cv2.getTickFrequency())
+        result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
-    # ROI (lado direito da tela)
-    x1 = largura * 2 // 3
-    y1 = altura // 4
-    x2 = largura
-    y2 = altura * 3 // 4
+        indicador_levantado = False
+        overlay = frame.copy()
 
-    roi = frame[y1:y2, x1:x2]
+        # Verifica se pelo menos uma mão foi detectada (mesmo sem landmarks completos)
+        if result.hand_landmarks or result.handedness:  # handedness existe mesmo com landmarks parciais
+            mao_detectada = True
+        else:
+            mao_detectada = False
 
-    # Converter pra HSV
-    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        if result.hand_landmarks:
+            for hand_landmarks in result.hand_landmarks:
+                lm = hand_landmarks
+                points = []
+                for landmark in lm:
+                    x = int(landmark.x * frame.shape[1])
+                    y = int(landmark.y * frame.shape[0])
+                    points.append((x, y))
 
-    # Range de pele (bem tolerante)
-    lower_skin = np.array([0, 20, 70])
-    upper_skin = np.array([35, 255, 255])
+                # Linhas brancas mais finas
+                for connection in HAND_CONNECTIONS:
+                    start = points[connection[0]]
+                    end = points[connection[1]]
+                    cv2.line(overlay, start, end, (255, 255, 255), 4)  # Era 8, agora 4 (mais fina)
 
-    mask = cv2.inRange(hsv, lower_skin, upper_skin)
+                # Bolinhas menores e mais elegantes
+                for (x, y) in points:
+                    cv2.circle(overlay, (x, y), 10, (255, 255, 255), -1)  # Glow branco menor
+                    cv2.circle(overlay, (x, y), 7, (0, 0, 255), -1)       # Vermelho menor
 
-    # Quantidade de pixels brancos
-    pixels_brancos = cv2.countNonZero(mask)
-    area_total = (x2 - x1) * (y2 - y1)
-    porcentagem = (pixels_brancos / area_total) * 100
+                # Condição do indicador (um pouco mais flexível)
+                index_tip = lm[8]
+                index_mcp = lm[5]
+                middle_tip = lm[12]
+                ring_tip = lm[16]
+                pinky_tip = lm[20]
 
-    mao_detectada = porcentagem > 3.0
+                if (index_tip.y < index_mcp.y - 0.12 and   # Um pouco menos rigoroso
+                    index_tip.y < middle_tip.y - 0.05 and  # Tolerância pros outros dedos
+                    index_tip.y < ring_tip.y - 0.05 and
+                    index_tip.y < pinky_tip.y - 0.05):
+                    indicador_levantado = True
 
-    if mao_detectada:
-        frames_sem_mao = 0
-        cv2.imshow("Macaco", macaco_dedo)
-        cor = (0, 255, 0)  # verde
-    else:
-        frames_sem_mao += 1
-        if frames_sem_mao > THRESHOLD:
-            cv2.imshow("Macaco", macaco_parado)
-        cor = (0, 0, 255)  # vermelho
+        # Mistura o overlay com o frame original (glow suave)
+        frame = cv2.addWeighted(overlay, 0.5, frame, 0.5, 0)
 
-    # Desenhar ROI
-    cv2.rectangle(frame, (x1, y1), (x2, y2), cor, 3)
+        # Atualiza o macaco
+        if indicador_levantado:
+            frames_sem_indicador = 0
+            cv2.imshow("Macaco", macaco_dedo)
+        else:
+            frames_sem_indicador += 1
+            if frames_sem_indicador > THRESHOLD:
+                cv2.imshow("Macaco", macaco_parado)
 
-    cv2.imshow("Camera", frame)
-
-    # ESC para sair
-    if cv2.waitKey(1) & 0xFF == 27:
-        break
+        cv2.imshow("Camera", frame)
+        
+        if cv2.waitKey(1) & 0xFF == 27:  # ESC
+            break
 
 cap.release()
 cv2.destroyAllWindows()
