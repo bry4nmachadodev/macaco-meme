@@ -109,7 +109,6 @@ with HandLandmarker.create_from_options(options) as landmarker:
             frames_sem_mao += 1
             if frames_sem_mao > THRESHOLD:
                 cv2.imshow("Macaco", macaco_parado)
-
         cv2.imshow("Camera", frame)
         
         if cv2.waitKey(1) & 0xFF == 27:  # ESC
